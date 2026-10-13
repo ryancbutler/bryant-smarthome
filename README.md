@@ -23,9 +23,61 @@ capabilities. These reads are the starting point for every control change.
 ### Set the system operating mode
 
 `mode SERIAL VALUE` updates the system-wide Infinity operating mode. Supply a
-value the device currently supports—for example, the mode shown by the system
-itself—because the CLI does not guess accepted mode names or translate them.
-The command previews the request first; append `--execute` to send it.
+verified device-supported control value; an observed `status.mode` value is
+not proof that the same value is accepted as a mode command. The CLI does not
+guess accepted mode names or translate them. The command previews the request
+first; append `--execute` to send it.
+
+### Read mode and equipment operation separately
+
+`system SERIAL` and `systems` expose separate mode, equipment, blower, and
+timestamp fields. These are raw API reports, not a single power switch:
+
+| Field | What to inspect |
+| --- | --- |
+| `config.mode` (`system` only) | Saved requested system mode. A successful mode change should be checked here. |
+| `status.mode` | Reported system state; observed values include `off` and `dehumidify`. It can differ from saved configuration and equipment telemetry. These observations are not a complete enum or accepted control-value list. |
+| `status.odu.opstat`, `status.odu.opmode` | Outdoor-unit operation status and operation mode. Observed values include `on` and `cooling`. |
+| `status.idu.opstat` | Indoor-unit operation status. Keep it separate from blower readings; an observed furnace reported `off` with nonzero blower readings. |
+| `status.idu.cfm`, `status.idu.iducfm`, `status.idu.blwrpm` | Reported indoor airflow and blower RPM. These help assess fan operation independently of the zone fan setting. |
+| `status.zones[].fan` (`system`/`zones`) | Zone activity fan setting; `off` does not establish that the blower has stopped during a cooling call. |
+| `status.localTime`, `status.localTimeOffset`, `status.utcTime`, `status.wcTime` | Service-provided timestamps and offset, useful for comparing successive reports. A refreshed timestamp does not establish that every equipment field is fresh. |
+
+Use `status.mode` to verify the controller's reported operating state and
+`config.mode` to verify the saved requested setting. For an off command, both
+became `off` in the live test; cooling can report a more specific state such
+as `dehumidify`, so exact equality is not a universal verification rule.
+
+A live cooling test confirmed saved `config.mode: cool`, while refreshed
+reports retained `status.mode: off`, outdoor `opstat: on`/`opmode: cooling`,
+and nonzero airflow/RPM. The same outdoor and blower values were also present
+before the mode change. Physical operation and per-field freshness were not
+independently verified, so do not collapse these reports into a definitive
+"powered on", "currently cooling", or "all equipment off" conclusion.
+Preserve missing/null values and device strings such as `na` as unavailable;
+do not interpret them as zero. The CLI does not measure electrical power.
+
+The subsequent off test confirmed both `config.mode` and `status.mode` became
+`off`, while outdoor operation and blower readings remained unchanged for
+approximately two minutes. Before the off command, `status.mode` had changed
+to `dehumidify` with saved mode `cool`. This is evidence that the reported
+state can be more specific than the selected mode; it does not establish the
+complete state mapping or prove physical equipment operation.
+
+Control readback can lag: the immediate read after the accepted off command
+still showed the previous configuration, while a later read matched the new
+mode and the mutation's returned `etag`. Verify convergence with bounded
+read-only checks; do not resend a control solely because the first read is old.
+`isDisconnected: false` is a connection report, not proof that every equipment
+measurement is current.
+
+For further validation, compare timestamped API reads with the thermostat
+display and observed outdoor-unit/blower operation. Distinguish selected mode,
+reported operating state, active zone setpoints/activity/hold, and equipment
+telemetry. Selecting cooling does not by itself guarantee a cooling demand;
+the test's reported room temperature equaled its active cooling setpoint.
+Any follow-up that changes a setpoint, fan, or mode requires authorization,
+a fresh precheck, and readback.
 
 ### Set manual heating and cooling temperatures
 

@@ -52,7 +52,10 @@ USER = '''query getUser($userName: String!) {
 SYSTEMS = '''query getInfinitySystems($userName: String!) {
   infinitySystems(userName: $userName) {
     profile { serial name firmware model idutype }
-    status { isDisconnected mode vacatrunning oat }
+    status { localTime localTimeOffset utcTime wcTime isDisconnected mode vacatrunning oat
+      odu { type opstat opmode iducfm blwrpm comprpm linevolt }
+      idu { type opstat cfm iducfm blwrpm }
+    }
     diagnosticInfo { support equipment { idu odu hum ven zone }
       activeDiagnostic { id status command }
     }
@@ -62,7 +65,9 @@ SYSTEMS = '''query getInfinitySystems($userName: String!) {
 SYSTEM = '''query getInfinitySystem($serial: String!) {
   profile: infinityProfile(serial: $serial) { serial name model firmware }
   status: infinityStatus(serial: $serial) {
-    isDisconnected mode vacatrunning oat
+    localTime localTimeOffset utcTime wcTime isDisconnected mode vacatrunning oat
+    odu { type opstat opmode iducfm blwrpm comprpm linevolt }
+    idu { type opstat cfm iducfm blwrpm }
     zones { id rt rh fan htsp clsp hold enabled currentActivity }
   }
   config: infinityConfig(serial: $serial) {
